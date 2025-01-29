@@ -19,6 +19,7 @@ import 'package:alice/ui/common/alice_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:alice/helper/alice_export_helper.dart';
+import 'package:share_plus/share_plus.dart';
 
 /// Page which displays list of calls caught by Alice. It displays tab view
 /// where calls and logs can be inspected. It allows to sort calls, delete calls
@@ -118,13 +119,15 @@ class _AliceCallsListPageState extends State<AliceCallsListPage>
                           description: context
                               .i18n(AliceTranslationKey.saveSuccessDescription)
                               .replaceAll("[path]", result.path!),
-                          secondButtonTitle: OperatingSystem.isAndroid
-                              ? context
-                                  .i18n(AliceTranslationKey.saveSuccessView)
-                              : null,
-                          secondButtonAction: () => OperatingSystem.isAndroid
-                              ? OpenFilex.open(result.path!)
-                              : null,
+                          secondButtonTitle: "Share",
+                          secondButtonAction: () {
+                            Share.shareXFiles(
+                              [XFile(result.path!)],
+                              subject: context.i18n(
+                                AliceTranslationKey.emailSubject,
+                              ),
+                            );
+                          },
                         );
                       } else {
                         final [String title, String description] =
