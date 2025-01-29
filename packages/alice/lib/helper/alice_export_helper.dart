@@ -3,6 +3,7 @@
 import 'dart:convert' show JsonEncoder;
 import 'dart:io' show Directory, File, FileMode, IOSink;
 
+import 'package:alice/core/alice_logger.dart';
 import 'package:alice/core/alice_utils.dart';
 import 'package:alice/helper/alice_conversion_helper.dart';
 import 'package:alice/helper/operating_system.dart';
@@ -12,11 +13,14 @@ import 'package:alice/model/alice_translation.dart';
 import 'package:alice/ui/common/alice_context_ext.dart';
 import 'package:alice/utils/alice_parser.dart';
 import 'package:alice/utils/curl.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:share_plus/share_plus.dart';
+
+import '../model/alice_log.dart';
 
 class AliceExportHelper {
   static const JsonEncoder _encoder = JsonEncoder.withIndent('  ');
@@ -136,6 +140,23 @@ class AliceExportHelper {
         '\n';
   }
 
+  static String _buildLoggerLog({
+    required BuildContext context,
+    required AliceLog log,
+  }) {
+    final String? error = _stringify(log.error);
+    final String? stackTrace = _stringify(log.stackTrace);
+    final StringBuffer text = StringBuffer()
+      ..writeAll([
+        '${log.timestamp}: ${log.message}\n',
+        if (error != null)
+          '${context.i18n(AliceTranslationKey.logsItemError)} $error\n',
+        if (stackTrace != null)
+          '${context.i18n(AliceTranslationKey.logsItemStackTrace)}: $stackTrace\n',
+      ]);
+    return text.toString();
+  }
+
   /// Build log string based on [call].
   static String _buildCallLog({
     required BuildContext context,
@@ -227,5 +248,95 @@ class AliceExportHelper {
       AliceUtils.log("Failed to generate call log: $exception");
       return null;
     }
+  }
+
+  static Future<AliceExportResult> saveLogsToFile({
+    required BuildContext context,
+    required AliceLogger logger,
+  }) async {
+    final bool permissionStatus = await _getPermissionStatus();
+    if (!permissionStatus) {
+      final bool status = await _requestPermission();
+      if (!status) {
+        return AliceExportResult(
+          success: false,
+          error: AliceExportResultError.permission,
+        );
+      }
+    }
+
+    return await _saveAliceLogsToFile(context, logger.logs);
+  }
+
+  /// Saves [AliceLog] to file. For android it uses external storage directory and
+  /// for ios it uses application documents directory.
+  static Future<AliceExportResult> _saveAliceLogsToFile(
+    BuildContext context,
+    List<AliceLog> logs,
+  ) async {
+    try {
+      if (logs.isEmpty) {
+        return AliceExportResult(
+          success: false,
+          error: AliceExportResultError.empty,
+        );
+      }
+
+      final Directory externalDir = await getApplicationCacheDirectory();
+      final String fileName =
+          '${_fileName}_${DateTime.now().millisecondsSinceEpoch}.txt';
+      final File file = File('${externalDir.path}/$fileName')..createSync();
+      final IOSink sink = file.openWrite(mode: FileMode.append)
+        ..write(await _buildAliceLog(context: context));
+      for (final AliceLog log in logs) {
+        sink.write(_buildLoggerLog(context: context, log: log));
+      }
+      await sink.flush();
+      await sink.close();
+
+      return AliceExportResult(
+        success: true,
+        path: file.path,
+      );
+    } catch (exception) {
+      AliceUtils.log(exception.toString());
+      return AliceExportResult(
+        success: false,
+        error: AliceExportResultError.file,
+      );
+    }
+  }
+}
+
+String? _stringify(dynamic object) {
+  if (object == null) return null;
+  if (object is String) return object.trim();
+  if (object is DiagnosticsNode) return object.toStringDeep();
+
+  try {
+    // ignore: avoid_dynamic_calls
+    object.toJson();
+    // It supports `toJson()`.
+
+    dynamic toEncodable(dynamic object) {
+      try {
+        // ignore: avoid_dynamic_calls
+        return object.toJson();
+      } catch (_) {
+        try {
+          return '$object';
+        } catch (_) {
+          return describeIdentity(object);
+        }
+      }
+    }
+
+    return JsonEncoder.withIndent('  ', toEncodable).convert(object);
+  } catch (_) {}
+
+  try {
+    return '$object'.trim();
+  } catch (_) {
+    return describeIdentity(object);
   }
 }

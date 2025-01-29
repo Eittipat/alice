@@ -18,6 +18,7 @@ import 'package:alice/ui/calls_list/widget/alice_logs_screen.dart';
 import 'package:alice/ui/common/alice_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:open_filex/open_filex.dart';
+import 'package:alice/helper/alice_export_helper.dart';
 
 /// Page which displays list of calls caught by Alice. It displays tab view
 /// where calls and logs can be inspected. It allows to sort calls, delete calls
@@ -101,6 +102,68 @@ class _AliceCallsListPageState extends State<AliceCallsListPage>
                 ),
           actions: isLoggerTab
               ? <Widget>[
+                  IconButton(
+                    icon: const Icon(Icons.save),
+                    onPressed: () async {
+                      final result = await AliceExportHelper.saveLogsToFile(
+                        context: context,
+                        logger: widget.core.configuration.aliceLogger,
+                      );
+
+                      if (result.success && result.path != null) {
+                        AliceGeneralDialog.show(
+                          context: context,
+                          title: context
+                              .i18n(AliceTranslationKey.saveSuccessTitle),
+                          description: context
+                              .i18n(AliceTranslationKey.saveSuccessDescription)
+                              .replaceAll("[path]", result.path!),
+                          secondButtonTitle: OperatingSystem.isAndroid
+                              ? context
+                                  .i18n(AliceTranslationKey.saveSuccessView)
+                              : null,
+                          secondButtonAction: () => OperatingSystem.isAndroid
+                              ? OpenFilex.open(result.path!)
+                              : null,
+                        );
+                      } else {
+                        final [String title, String description] =
+                            switch (result.error) {
+                          AliceExportResultError.logGenerate => [
+                              context.i18n(AliceTranslationKey
+                                  .saveDialogPermissionErrorTitle),
+                              context.i18n(AliceTranslationKey
+                                  .saveDialogPermissionErrorDescription),
+                            ],
+                          AliceExportResultError.empty => [
+                              context.i18n(AliceTranslationKey
+                                  .saveDialogEmptyErrorTitle),
+                              context.i18n(AliceTranslationKey
+                                  .saveDialogEmptyErrorDescription),
+                            ],
+                          AliceExportResultError.permission => [
+                              context.i18n(AliceTranslationKey
+                                  .saveDialogPermissionErrorTitle),
+                              context.i18n(AliceTranslationKey
+                                  .saveDialogPermissionErrorDescription),
+                            ],
+                          AliceExportResultError.file => [
+                              context.i18n(AliceTranslationKey
+                                  .saveDialogFileSaveErrorTitle),
+                              context.i18n(AliceTranslationKey
+                                  .saveDialogFileSaveErrorDescription),
+                            ],
+                          _ => ["", ""],
+                        };
+
+                        AliceGeneralDialog.show(
+                          context: context,
+                          title: title,
+                          description: description,
+                        );
+                      }
+                    },
+                  ),
                   IconButton(
                     icon: const Icon(Icons.terminal),
                     onPressed: _onLogsChangePressed,
